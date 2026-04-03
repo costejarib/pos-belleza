@@ -34,7 +34,7 @@ import {
   Warning
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
-import Layout from '../components/Layout';
+
 
 const HistorialVentas = () => {
   const { user } = useAuth();
@@ -200,7 +200,7 @@ const HistorialVentas = () => {
   };
 
   return (
-    <Layout>
+    <>
       <Box sx={{ mb: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="h4" component="h1">
@@ -436,7 +436,7 @@ const HistorialVentas = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Layout>
+    </>
   );
 };
 
