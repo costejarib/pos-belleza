@@ -146,8 +146,9 @@ const HistorialVentas = () => {
       });
 
       if (response.ok) {
-        setMensaje({ type: 'success', text: 'Factura generada correctamente' });
-        // En una implementación real, aquí se descargaría el PDF
+        const data = await response.json();
+        // Abrir PDF en nueva pestaña
+        window.open(`http://localhost:3001${data.url}`, '_blank');
       }
     } catch (error) {
       console.error('Error al generar factura:', error);
