@@ -99,7 +99,7 @@ router.get('/resumen/hoy', authMiddleware, (req, res) => {
 // Listar ventas
 router.get('/', authMiddleware, (req, res) => {
   const db = getDb();
-  const { fechaInicio, fechaFin } = req.query;
+  const { fechaInicio, fechaFin, vendedor_id } = req.query;
 
   let query = `
     SELECT v.*, c.nombre as cliente_nombre, u.nombre as vendedor_nombre
@@ -109,6 +109,16 @@ router.get('/', authMiddleware, (req, res) => {
     WHERE 1=1
   `;
   const params = [];
+
+  // Si es vendedor, solo ver sus propias ventas
+  if (req.user.rol === 'vendedor') {
+    query += ' AND v.usuario_id = ?';
+    params.push(req.user.id);
+  } else if (vendedor_id) {
+    // Admin puede filtrar por vendedor
+    query += ' AND v.usuario_id = ?';
+    params.push(vendedor_id);
+  }
 
   if (fechaInicio) {
     query += ' AND DATE(v.creado_en) >= ?';

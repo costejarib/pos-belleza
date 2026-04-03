@@ -1,344 +1,443 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Typography,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Button,
+  Chip,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText,
+  Tooltip,
+  Alert
+} from '@mui/material';
+import {
+  Visibility,
+  Delete,
+  PictureAsPdf,
+  FilterList,
+  ClearAll,
+  Warning
+} from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
+import Layout from '../components/Layout';
 
-export default function HistorialVentas() {
-  const { getAuthHeaders, user } = useAuth();
+const HistorialVentas = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.rol === 'admin';
+  
   const [ventas, setVentas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
-  const [metodoFiltro, setMetodoFiltro] = useState('');
   const [vendedorFiltro, setVendedorFiltro] = useState('');
   const [vendedores, setVendedores] = useState([]);
-  const [ventaDetalle, setVentaDetalle] = useState(null);
-  const [mostrarModal, setMostrarModal] = useState(false);
-  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
-  const [eliminando, setEliminando] = useState(false);
-
-  const isAdmin = user?.rol === 'admin';
-
-  useEffect(() => {
-    cargarVentas();
-    if (isAdmin) {
-      cargarVendedores();
-    }
-  }, [isAdmin]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedVenta, setSelectedVenta] = useState(null);
+  const [detalleOpen, setDetalleOpen] = useState(false);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [mensaje, setMensaje] = useState({ type: '', text: '' });
 
   const cargarVentas = async () => {
-    setLoading(true);
     try {
-      let url = '/api/ventas?';
-      if (fechaInicio) url += `fecha_inicio=${fechaInicio}&`;
-      if (fechaFin) url += `fecha_fin=${fechaFin}&`;
-      if (metodoFiltro) url += `metodo_pago=${metodoFiltro}`;
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      
+      // Construir query params
+      const params = new URLSearchParams();
+      if (fechaInicio) params.append('fechaInicio', fechaInicio);
+      if (fechaFin) params.append('fechaFin', fechaFin);
+      if (isAdmin && vendedorFiltro) params.append('vendedor_id', vendedorFiltro);
+      
+      const response = await fetch(`http://localhost:3001/api/ventas?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
-      const res = await fetch(url, { headers: getAuthHeaders() });
-      if (res.ok) setVentas(await res.json());
+      if (!response.ok) throw new Error('Error al cargar ventas');
+      
+      const data = await response.json();
+      setVentas(data);
     } catch (error) {
-      console.error('Error cargando ventas:', error);
+      console.error('Error:', error);
+      setMensaje({ type: 'error', text: 'Error al cargar el historial de ventas' });
     } finally {
       setLoading(false);
     }
   };
 
-  const verDetalle = async (ventaId) => {
+  const cargarVendedores = async () => {
+    if (!isAdmin) return;
+    
     try {
-      const res = await fetch(`/api/ventas/${ventaId}`, { headers: getAuthHeaders() });
-      if (res.ok) {
-        const data = await res.json();
-        setVentaDetalle(data);
-        setMostrarModal(true);
-      }
-    } catch (error) {
-      console.error('Error cargando detalle:', error);
-    }
-  };
-
-  const formatearFecha = (fecha) => {
-    return new Date(fecha).toLocaleString('es-MX', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  };
-
-  const calcularTotalVentas = () => {
-    return ventas.reduce((sum, v) => sum + (v.total || 0), 0);
-  };
-
-  const calcularVentasPorMetodo = () => {
-    const metodos = {};
-    ventas.forEach(v => {
-      const metodo = v.metodo_pago || 'efectivo';
-      metodos[metodo] = (metodos[metodo] || 0) + (v.total || 0);
-    });
-    return metodos;
-  };
-
-  const ventasPorMetodo = calcularVentasPorMetodo();
-
-  const eliminarHistorial = async () => {
-    setEliminando(true);
-    try {
-      const response = await fetch('/api/ventas/historial', {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:3001/api/usuarios', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
 
       if (response.ok) {
         const data = await response.json();
-        alert(data.message);
-        setVentas([]);
-        setMostrarConfirmacion(false);
-      } else {
-        const error = await response.json();
-        alert(error.error || 'Error al eliminar el historial');
+        setVendedores(data);
       }
     } catch (error) {
-      console.error('Error:', error);
-      alert('Error al eliminar el historial');
-    } finally {
-      setEliminando(false);
+      console.error('Error al cargar vendedores:', error);
     }
   };
 
-  if (loading && ventas.length === 0) {
-    return <div>Cargando...</div>;
-  }
+  useEffect(() => {
+    cargarVentas();
+    cargarVendedores();
+  }, []);
+
+  const handleBuscar = () => {
+    cargarVentas();
+  };
+
+  const handleLimpiar = () => {
+    setFechaInicio('');
+    setFechaFin('');
+    setVendedorFiltro('');
+    setTimeout(cargarVentas, 100);
+  };
+
+  const verDetalle = async (id) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:3001/api/ventas/${id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedVenta(data);
+        setDetalleOpen(true);
+      }
+    } catch (error) {
+      console.error('Error al obtener detalle:', error);
+    }
+  };
+
+  const generarFactura = async (id) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:3001/api/ventas/${id}/factura`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        setMensaje({ type: 'success', text: 'Factura generada correctamente' });
+        // En una implementación real, aquí se descargaría el PDF
+      }
+    } catch (error) {
+      console.error('Error al generar factura:', error);
+    }
+  };
+
+  const handleEliminarHistorial = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:3001/api/ventas/historial', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setMensaje({ type: 'success', text: data.message });
+        cargarVentas();
+      } else {
+        const error = await response.json();
+        setMensaje({ type: 'error', text: error.error || 'Error al eliminar historial' });
+      }
+    } catch (error) {
+      setMensaje({ type: 'error', text: 'Error al eliminar historial' });
+    } finally {
+      setDeleteAllOpen(false);
+    }
+  };
+
+  const formatearFecha = (fecha) => {
+    return new Date(fecha).toLocaleString('es-ES', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getMetodoPagoColor = (metodo) => {
+    switch (metodo) {
+      case 'efectivo': return 'success';
+      case 'tarjeta': return 'primary';
+      case 'transferencia': return 'info';
+      case 'credito': return 'warning';
+      default: return 'default';
+    }
+  };
 
   return (
-    <div>
-      <div className="page-header">
-        <h2>Historial de Ventas</h2>
-        {isAdmin && (
-          <button
-            className="btn btn-danger"
-            onClick={() => setMostrarConfirmacion(true)}
-            disabled={ventas.length === 0}
-          >
-            🗑️ Eliminar Todo
-          </button>
-        )}
-      </div>
-
-      {/* Resumen */}
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-value">{ventas.length}</div>
-          <div className="stat-label">Ventas</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">${calcularTotalVentas().toFixed(2)}</div>
-          <div className="stat-label">Total</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">${(ventasPorMetodo['efectivo'] || 0).toFixed(2)}</div>
-          <div className="stat-label">💵 Efectivo</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">${(ventasPorMetodo['tarjeta'] || 0).toFixed(2)}</div>
-          <div className="stat-label">💳 Tarjeta</div>
-        </div>
-      </div>
-
-      {/* Filtros */}
-      <div className="card">
-        <div className="card-header">
-          <h3>Filtros</h3>
-          <button className="btn btn-primary" onClick={cargarVentas}>
-            Aplicar
-          </button>
-        </div>
-        <div className="card-body filtros-row">
-          <div className="form-group">
-            <label>Desde</label>
-            <input
-              type="date"
-              className="form-control"
-              value={fechaInicio}
-              onChange={(e) => setFechaInicio(e.target.value)}
-            />
-          </div>
-          <div className="form-group">
-            <label>Hasta</label>
-            <input
-              type="date"
-              className="form-control"
-              value={fechaFin}
-              onChange={(e) => setFechaFin(e.target.value)}
-            />
-          </div>
-          <div className="form-group">
-            <label>Método</label>
-            <select
-              className="form-control"
-              value={metodoFiltro}
-              onChange={(e) => setMetodoFiltro(e.target.value)}
+    <Layout>
+      <Box sx={{ mb: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h4" component="h1">
+            Historial de Ventas
+          </Typography>
+          <Box>
+            <Button
+              startIcon={<FilterList />}
+              onClick={() => setShowFilters(!showFilters)}
+              sx={{ mr: 1 }}
             >
-              <option value="">Todos</option>
-              <option value="efectivo">Efectivo</option>
-              <option value="tarjeta">Tarjeta</option>
-              <option value="transferencia">Transferencia</option>
-            </select>
-          </div>
-        </div>
-      </div>
+              {showFilters ? 'Ocultar filtros' : 'Mostrar filtros'}
+            </Button>
+            {isAdmin && (
+              <Button
+                color="error"
+                startIcon={<Delete />}
+                onClick={() => setDeleteAllOpen(true)}
+              >
+                Eliminar todo
+              </Button>
+            )}
+          </Box>
+        </Box>
 
-      {/* Tabla */}
-      <div className="card">
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Fecha</th>
-                <th>Cliente</th>
-                <th>Items</th>
-                <th>Subtotal</th>
-                <th>Desc.</th>
-                <th>Imp.</th>
-                <th>Total</th>
-                <th>Método</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ventas.length === 0 ? (
-                <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', color: '#6b7280' }}>
+        {mensaje.text && (
+          <Alert severity={mensaje.type} sx={{ mb: 2 }} onClose={() => setMensaje({ type: '', text: '' })}>
+            {mensaje.text}
+          </Alert>
+        )}
+
+        {showFilters && (
+          <Paper sx={{ p: 2, mb: 2 }}>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+              <TextField
+                label="Fecha inicio"
+                type="date"
+                value={fechaInicio}
+                onChange={(e) => setFechaInicio(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                size="small"
+              />
+              <TextField
+                label="Fecha fin"
+                type="date"
+                value={fechaFin}
+                onChange={(e) => setFechaFin(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                size="small"
+              />
+              {isAdmin && (
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <InputLabel>Vendedor</InputLabel>
+                  <Select
+                    value={vendedorFiltro}
+                    label="Vendedor"
+                    onChange={(e) => setVendedorFiltro(e.target.value)}
+                  >
+                    <MenuItem value="">Todos</MenuItem>
+                    {vendedores.map((v) => (
+                      <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+              <Button variant="contained" onClick={handleBuscar}>
+                Buscar
+              </Button>
+              <Button variant="outlined" onClick={handleLimpiar}>
+                Limpiar
+              </Button>
+            </Box>
+          </Paper>
+        )}
+
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>ID</TableCell>
+                <TableCell>Fecha</TableCell>
+                {isAdmin && <TableCell>Vendedor</TableCell>}
+                <TableCell>Cliente</TableCell>
+                <TableCell>Método</TableCell>
+                <TableCell align="right">Total</TableCell>
+                <TableCell align="center">Acciones</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={isAdmin ? 7 : 6} align="center">
+                    Cargando...
+                  </TableCell>
+                </TableRow>
+              ) : ventas.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={isAdmin ? 7 : 6} align="center">
                     No hay ventas registradas
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
-                ventas.map(v => (
-                  <tr key={v.id}>
-                    <td><strong>#{v.id}</strong></td>
-                    <td>{formatearFecha(v.creado_en)}</td>
-                    <td>{v.cliente_nombre || 'Cliente general'}</td>
-                    <td>{v.cantidad_items || v.items_count || '-'}</td>
-                    <td>${(v.subtotal || 0).toFixed(2)}</td>
-                    <td>${(v.descuento || 0).toFixed(2)}</td>
-                    <td>${(v.impuesto || 0).toFixed(2)}</td>
-                    <td><strong>${(v.total || 0).toFixed(2)}</strong></td>
-                    <td>
-                      <span className={`badge badge-${v.metodo_pago === 'efectivo' ? 'success' : v.metodo_pago === 'tarjeta' ? 'info' : 'warning'}`}>
-                        {v.metodo_pago || 'efectivo'}
-                      </span>
-                    </td>
-                    <td>
-                      <button className="btn btn-sm" onClick={() => verDetalle(v.id)}>
-                        👁️ Ver
-                      </button>
-                    </td>
-                  </tr>
+                ventas.map((venta) => (
+                  <TableRow key={venta.id}>
+                    <TableCell>#{venta.id.toString().padStart(6, '0')}</TableCell>
+                    <TableCell>{formatearFecha(venta.creado_en)}</TableCell>
+                    {isAdmin && <TableCell>{venta.vendedor_nombre || '-'}</TableCell>}
+                    <TableCell>{venta.cliente_nombre || 'Consumidor Final'}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={venta.metodo_pago?.toUpperCase() || 'EFECTIVO'}
+                        color={getMetodoPagoColor(venta.metodo_pago)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="right">${venta.total?.toFixed(2) || '0.00'}</TableCell>
+                    <TableCell align="center">
+                      <Tooltip title="Ver detalle">
+                        <IconButton size="small" onClick={() => verDetalle(venta.id)}>
+                          <Visibility />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Generar factura">
+                        <IconButton size="small" onClick={() => generarFactura(venta.id)}>
+                          <PictureAsPdf />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
                 ))
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </TableBody>
+          </Table>
+        </TableContainer>
 
-      {/* Modal Detalle */}
-      {mostrarModal && ventaDetalle && (
-        <div className="modal-overlay" onClick={() => setMostrarModal(false)}>
-          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Detalle de Venta #{ventaDetalle.id}</h3>
-              <button className="btn-close" onClick={() => setMostrarModal(false)}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="detalle-info">
-                <p><strong>Fecha:</strong> {formatearFecha(ventaDetalle.creado_en)}</p>
-                <p><strong>Cliente:</strong> {ventaDetalle.cliente_nombre || 'Cliente general'}</p>
-                <p><strong>Vendedor:</strong> {ventaDetalle.usuario_nombre || '-'}</p>
-                <p><strong>Método de pago:</strong> {ventaDetalle.metodo_pago}</p>
-              </div>
+        {/* Resumen */}
+        {!loading && ventas.length > 0 && (
+          <Paper sx={{ p: 2, mt: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Resumen
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 4 }}>
+              <Box>
+                <Typography color="text.secondary">Total ventas</Typography>
+                <Typography variant="h5">{ventas.length}</Typography>
+              </Box>
+              <Box>
+                <Typography color="text.secondary">Monto total</Typography>
+                <Typography variant="h5">
+                  ${ventas.reduce((acc, v) => acc + (v.total || 0), 0).toFixed(2)}
+                </Typography>
+              </Box>
+            </Box>
+          </Paper>
+        )}
+      </Box>
 
-              <h4 style={{ marginTop: '1.5rem', marginBottom: '0.75rem' }}>Productos</h4>
-              <table className="table-detalle">
-                <thead>
-                  <tr>
-                    <th>Producto</th>
-                    <th>Cantidad</th>
-                    <th>P. Unitario</th>
-                    <th>Subtotal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(ventaDetalle.items || ventaDetalle.detalles || []).map((item, idx) => (
-                    <tr key={idx}>
-                      <td>{item.producto_nombre || item.nombre}</td>
-                      <td>{item.cantidad}</td>
-                      <td>${(item.precio_unitario || 0).toFixed(2)}</td>
-                      <td>${((item.cantidad || 0) * (item.precio_unitario || 0)).toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      {/* Dialog detalle de venta */}
+      <Dialog open={detalleOpen} onClose={() => setDetalleOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Detalle de Venta #{selectedVenta?.id?.toString().padStart(6, '0')}</DialogTitle>
+        <DialogContent>
+          {selectedVenta && (
+            <Box>
+              <Box sx={{ mb: 2 }}>
+                <Typography><strong>Fecha:</strong> {formatearFecha(selectedVenta.creado_en)}</Typography>
+                <Typography><strong>Vendedor:</strong> {selectedVenta.vendedor_nombre}</Typography>
+                <Typography><strong>Cliente:</strong> {selectedVenta.cliente_nombre || 'Consumidor Final'}</Typography>
+                <Typography><strong>Método de pago:</strong> {selectedVenta.metodo_pago?.toUpperCase()}</Typography>
+              </Box>
+              
+              <Typography variant="subtitle1" gutterBottom><strong>Productos:</strong></Typography>
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Producto</TableCell>
+                      <TableCell align="center">Cantidad</TableCell>
+                      <TableCell align="right">P. Unitario</TableCell>
+                      <TableCell align="right">Subtotal</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {selectedVenta.detalles?.map((detalle, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell>{detalle.producto_nombre}</TableCell>
+                        <TableCell align="center">{detalle.cantidad}</TableCell>
+                        <TableCell align="right">${detalle.precio_unitario?.toFixed(2)}</TableCell>
+                        <TableCell align="right">${detalle.subtotal?.toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              
+              <Box sx={{ mt: 2, textAlign: 'right' }}>
+                <Typography>Subtotal: ${selectedVenta.subtotal?.toFixed(2)}</Typography>
+                {selectedVenta.descuento > 0 && (
+                  <Typography color="error">Descuento: -${selectedVenta.descuento?.toFixed(2)}</Typography>
+                )}
+                {selectedVenta.impuesto > 0 && (
+                  <Typography>Impuesto: ${selectedVenta.impuesto?.toFixed(2)}</Typography>
+                )}
+                <Typography variant="h6"><strong>Total: ${selectedVenta.total?.toFixed(2)}</strong></Typography>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetalleOpen(false)}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
 
-              <div className="detalle-totales">
-                <div className="total-row">
-                  <span>Subtotal:</span>
-                  <span>${(ventaDetalle.subtotal || 0).toFixed(2)}</span>
-                </div>
-                <div className="total-row">
-                  <span>Descuento:</span>
-                  <span>-${(ventaDetalle.descuento || 0).toFixed(2)}</span>
-                </div>
-                <div className="total-row">
-                  <span>Impuesto:</span>
-                  <span>+${(ventaDetalle.impuesto || 0).toFixed(2)}</span>
-                </div>
-                <div className="total-row total-final">
-                  <span><strong>TOTAL:</strong></span>
-                  <span><strong>${(ventaDetalle.total || 0).toFixed(2)}</strong></span>
-                </div>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn" onClick={() => setMostrarModal(false)}>Cerrar</button>
-              <button className="btn btn-primary" onClick={() => window.print()}>
-                🖨️ Imprimir
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Confirmación Eliminar */}
-      {mostrarConfirmacion && (
-        <div className="modal-overlay" onClick={() => setMostrarConfirmacion(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>⚠️ Confirmar Eliminación</h3>
-              <button className="btn-close" onClick={() => setMostrarConfirmacion(false)}>×</button>
-            </div>
-            <div className="modal-body">
-              <p style={{ fontSize: '1rem', color: '#dc2626', fontWeight: 'bold' }}>
-                ¿Estás seguro de eliminar TODO el historial de ventas?
-              </p>
-              <p style={{ color: '#6b7280', marginTop: '0.5rem' }}>
-                Esta acción eliminará <strong>{ventas.length} ventas</strong> y no se puede deshacer.
-              </p>
-            </div>
-            <div className="modal-footer">
-              <button className="btn" onClick={() => setMostrarConfirmacion(false)} disabled={eliminando}>
-                Cancelar
-              </button>
-              <button 
-                className="btn btn-danger" 
-                onClick={eliminarHistorial}
-                disabled={eliminando}
-              >
-                {eliminando ? 'Eliminando...' : '🗑️ Sí, Eliminar Todo'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      {/* Dialog confirmar eliminar todo */}
+      <Dialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Warning color="error" />
+          Eliminar Todo el Historial
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            ¿Estás seguro de que deseas eliminar TODO el historial de ventas?
+            Esta acción no se puede deshacer y eliminará:
+            <br /><br />
+            - Todas las ventas registradas<br />
+            - Todos los detalles de venta<br />
+            - Todos los créditos y abonos
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteAllOpen(false)}>Cancelar</Button>
+          <Button color="error" variant="contained" onClick={handleEliminarHistorial}>
+            Eliminar Todo
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Layout>
   );
-}
+};
+
+export default HistorialVentas;
